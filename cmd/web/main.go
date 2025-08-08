@@ -4,9 +4,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/go-squad-5/go-init/internal/app"
-	"github.com/go-squad-5/go-init/internal/config"
-	"github.com/go-squad-5/go-init/internal/router"
+	"github.com/go-squad-5/pdf-generator/internal/app"
+	"github.com/go-squad-5/pdf-generator/internal/config"
+	"github.com/go-squad-5/pdf-generator/internal/router"
 )
 
 func main() {

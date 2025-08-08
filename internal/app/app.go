@@ -1,6 +1,6 @@
 package app
 
-import "github.com/go-squad-5/go-init/internal/config"
+import "github.com/go-squad-5/pdf-generator/internal/config"
 
 type App struct {
 	config *config.Config

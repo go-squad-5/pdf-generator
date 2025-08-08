@@ -3,8 +3,8 @@ package router
 import (
 	"net/http"
 
-	"github.com/go-squad-5/go-init/internal/app"
-	"github.com/go-squad-5/go-init/internal/handlers"
+	"github.com/go-squad-5/pdf-generator/internal/app"
+	"github.com/go-squad-5/pdf-generator/internal/handlers"
 )
 
 type Router struct {
