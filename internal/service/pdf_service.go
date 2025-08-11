@@ -20,7 +20,6 @@ func NewPDFService(sessionRepo *repository.SessionRepository, attemptRepo *repos
 	return &PDFService{sessionRepo: sessionRepo, attemptRepo: attemptRepo}
 }
 
-// GenerateQuizReport generates a PDF report for a given quiz session ID.
 func (s *PDFService) GenerateQuizReport(sessionID int) ([]byte, error) {
 	var wg sync.WaitGroup
 	var session *models.Session
@@ -60,12 +59,10 @@ func (s *PDFService) createPDF(session *models.Session, attempts []models.QuizAt
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
 
-	// --- Header ---
 	pdf.SetFont("Arial", "B", 20)
 	pdf.Cell(0, 10, "Quiz Performance Report")
 	pdf.Ln(12)
 
-	// --- Session Info ---
 	pdf.SetFont("Arial", "B", 12)
 	pdf.Cell(40, 8, "Student Name:")
 	pdf.SetFont("Arial", "", 12)

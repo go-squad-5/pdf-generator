@@ -14,17 +14,15 @@ import (
 
 const (
 	smtpHost = "localhost"
-	smtpPort = 1026 // Using the port that works on your machine
+	smtpPort = 1026
 )
 
-// EmailService handles sending paginated quiz report emails.
 type EmailService struct {
 	sessionRepo *repository.SessionRepository
 	attemptRepo *repository.QuizAttemptRepository
 	dialer      *gomail.Dialer
 }
 
-// NewEmailService creates a new EmailService for the quiz system.
 func NewEmailService(sessionRepo *repository.SessionRepository, attemptRepo *repository.QuizAttemptRepository) *EmailService {
 	d := gomail.NewDialer(smtpHost, smtpPort, "", "")
 	return &EmailService{
@@ -34,7 +32,6 @@ func NewEmailService(sessionRepo *repository.SessionRepository, attemptRepo *rep
 	}
 }
 
-// SendQuizReportByEmail fetches data and sends paginated emails concurrently.
 func (s *EmailService) SendQuizReportByEmail(sessionID int) error {
 	var wg sync.WaitGroup
 	var session *models.Session
@@ -65,7 +62,6 @@ func (s *EmailService) SendQuizReportByEmail(sessionID int) error {
 		return fmt.Errorf("no attempts found for session %d", sessionID)
 	}
 
-	// --- Logic for sending emails with 10 questions per email ---
 	const questionsPerEmail = 10
 	var emailWg sync.WaitGroup
 
@@ -79,7 +75,6 @@ func (s *EmailService) SendQuizReportByEmail(sessionID int) error {
 		totalPages := (len(attempts) + questionsPerEmail - 1) / questionsPerEmail
 
 		emailWg.Add(1)
-		// Launch a goroutine to send each email part
 		go func(pAttempts []models.QuizAttempt, pNum, tPages int) {
 			defer emailWg.Done()
 			log.Printf("Goroutine started for email part %d/%d for session %d", pNum, tPages, sessionID)
@@ -92,7 +87,6 @@ func (s *EmailService) SendQuizReportByEmail(sessionID int) error {
 	return nil
 }
 
-// sendSingleEmailPart composes and sends one email with a chunk of attempts.
 func (s *EmailService) sendSingleEmailPart(session *models.Session, attemptsChunk []models.QuizAttempt, pageNum, totalPages int) {
 	body, err := s.parseEmailTemplate(session, attemptsChunk, pageNum, totalPages)
 	if err != nil {

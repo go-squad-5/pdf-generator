@@ -19,7 +19,6 @@ func NewPDFHandler(s *service.PDFService) *PDFHandler {
 	return &PDFHandler{service: s}
 }
 
-// GenerateReportHandler now takes a session ID.
 func (h *PDFHandler) GenerateReportHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	idStr, ok := vars["id"]
