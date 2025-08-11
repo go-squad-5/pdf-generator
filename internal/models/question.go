@@ -7,7 +7,7 @@ import (
 )
 
 // OptionsMap is a custom type to handle the JSON 'options' field.
-type OptionsMap map[string]string
+type OptionsMap []string
 
 // Value converts the OptionsMap to a JSON string for database storage.
 func (o OptionsMap) Value() (driver.Value, error) {

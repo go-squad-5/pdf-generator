@@ -13,10 +13,10 @@ func NewQuizzesRepository(db *sql.DB) *QuizzesRepository { return &QuizzesReposi
 func (r *QuizzesRepository) GetQuizzesBySessionID(sessionID string) ([]models.Quiz, error) {
 	query := `
 		SELECT
-			q.id, q.session_id, q.question_id, q.answer, q.isCorrect,
+			q.id, q.session_id, q.question_id, q.answer, q.is_correct,
 			qs.question, qs.options, qs.answer as correctAnswer, qs.topic
-		FROM Quizzes q
-		JOIN Questions qs ON q.question_id = qs.id
+		FROM quizzes q
+		JOIN questions qs ON q.question_id = qs.id
 		WHERE q.session_id = ?
 		ORDER BY qs.id`
 	rows, err := r.DB.Query(query, sessionID)

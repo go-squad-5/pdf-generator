@@ -74,17 +74,17 @@ func (s *PDFService) createPDF(session *models.Session, quizzes []models.Quiz) (
 		pdf.Ln(2)
 
 		pdf.SetFont("Arial", "", 9)
-		if quiz.IsCorrect {
+		if quiz.IsCorrect.Valid && quiz.IsCorrect.Bool {
 			pdf.SetFillColor(200, 255, 200)
 			pdf.Cell(40, 5, "Your Answer (Correct):")
 		} else {
 			pdf.SetFillColor(255, 200, 200)
 			pdf.Cell(40, 5, "Your Answer (Incorrect):")
 		}
-		pdf.CellFormat(0, 5, quiz.Answer, "", 0, "L", true, 0, "")
+		pdf.CellFormat(0, 5, quiz.Answer.String, "", 0, "L", true, 0, "")
 		pdf.Ln(5)
 
-		if !quiz.IsCorrect {
+		if !quiz.IsCorrect.Valid || !quiz.IsCorrect.Bool {
 			pdf.SetFillColor(230, 230, 230)
 			pdf.Cell(40, 5, "Correct Answer:")
 			pdf.CellFormat(0, 5, quiz.QuestionData.Answer, "", 0, "L", true, 0, "")
