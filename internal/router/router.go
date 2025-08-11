@@ -5,10 +5,12 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func NewRouter(pdfHandler *handler.PDFHandler) *mux.Router {
+func NewRouter(pdfHandler *handler.PDFHandler, emailHandler *handler.EmailHandler) *mux.Router {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/users/{id}/report", pdfHandler.GenerateReportHandler).Methods("GET")
+	r.HandleFunc("/sessions/{id}/report", pdfHandler.GenerateReportHandler).Methods("GET")
+
+	r.HandleFunc("/sessions/{id}/email-report", emailHandler.SendReportHandler).Methods("POST")
 
 	return r
 }

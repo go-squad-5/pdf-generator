@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-squad-5/pdf-generator/internal/handler"
 	"github.com/go-squad-5/pdf-generator/internal/repository"
@@ -11,6 +12,8 @@ import (
 )
 
 func main() {
+	os.Remove("./database.sqlite")
+
 	db, err := repository.InitDB("./database.sqlite")
 	if err != nil {
 		log.Fatalf("Could not initialize database: %v", err)
@@ -18,12 +21,16 @@ func main() {
 	defer db.Close()
 	log.Println("Database initialized successfully.")
 
-	userRepo := repository.NewUserRepository(db)
-	markRepo := repository.NewMarkRepository(db)
-	pdfService := service.NewPDFService(userRepo, markRepo)
-	pdfHandler := handler.NewPDFHandler(pdfService)
+	sessionRepo := repository.NewSessionRepository(db)
+	attemptRepo := repository.NewQuizAttemptRepository(db)
 
-	r := router.NewRouter(pdfHandler)
+	pdfService := service.NewPDFService(sessionRepo, attemptRepo)
+	emailService := service.NewEmailService(sessionRepo, attemptRepo)
+
+	pdfHandler := handler.NewPDFHandler(pdfService)
+	emailHandler := handler.NewEmailHandler(emailService)
+
+	r := router.NewRouter(pdfHandler, emailHandler)
 
 	port := ":8080"
 	log.Printf("Server starting on port %s", port)

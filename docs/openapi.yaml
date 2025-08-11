@@ -1,205 +1,209 @@
 openapi: 3.0.3
 info:
-  title: PDF Generator Microservice
+  title: Go Quiz Report API
   description: |
-    A microservice that generates customized PDFs based on user and session information.
-    The PDF format remains consistent, but fields are populated with user-specific data.
-  version: 1.0.0
-  contact:
-    name: API Support
-    email: support@pdfgenerator.com
+    A RESTful API built in Go to generate detailed PDF reports and send email notifications for quiz sessions.
+    The API uses a SQLite database and leverages concurrency for efficient data processing.
+
+    ## Database Schema
+
+    The application uses a SQLite database with the following four tables to manage quiz data:
+
+    ### 1. `users`
+    Stores information about the students taking the quizzes.
+    - **id** (INTEGER, PRIMARY KEY): Unique identifier for the user.
+    - **first_name** (TEXT): User's first name.
+    - **last_name** (TEXT): User's last name.
+    - **email** (TEXT): User's email address, used for sending reports.
+    - **job_title** (TEXT): User's role (e.g., "Student").
+
+    ### 2. `questions`
+    A bank of all possible questions for the quizzes.
+    - **id** (INTEGER, PRIMARY KEY): Unique identifier for the question.
+    - **question_text** (TEXT): The full text of the question.
+    - **option_a** (TEXT): Text for choice A.
+    - **option_b** (TEXT): Text for choice B.
+    - **option_c** (TEXT): Text for choice C.
+    - **option_d** (TEXT): Text for choice D.
+    - **correct_option** (TEXT): The correct choice ('a', 'b', 'c', or 'd').
+
+    ### 3. `sessions`
+    Represents a single, completed quiz attempt by a user.
+    - **id** (INTEGER, PRIMARY KEY): Unique identifier for the quiz session.
+    - **user_id** (INTEGER, FOREIGN KEY -> users.id): The user who took the quiz.
+    - **total_marks** (INTEGER): The final score for this session.
+    - **session_date** (DATETIME): The date and time the session was completed.
+
+    ### 4. `quiz_attempts`
+    Stores the specific answer for each question within a session.
+    - **id** (INTEGER, PRIMARY KEY): Unique identifier for the attempt.
+    - **session_id** (INTEGER, FOREIGN KEY -> sessions.id): The session this attempt belongs to.
+    - **question_id** (INTEGER, FOREIGN KEY -> questions.id): The question that was answered.
+    - **chosen_option** (TEXT): The option selected by the user ('a', 'b', 'c', or 'd').
+
+  version: "1.0.0"
 
 servers:
-  - url: http://localhost:8080/v1
-    description: Local development
+  - url: http://localhost:8080
+    description: Local development server
 
 paths:
-  /generate-pdf:
+  /sessions/{id}/report:
     get:
-      summary: Generate a customized PDF document
-      description: |
-        Generates a PDF based on the provided session ID and user ID.
-        The PDF structure remains consistent but specific fields are populated with user data.
-      operationId: generatePdf
+      summary: Generate PDF Quiz Report
+      description: Fetches all data for a specific quiz session and generates a detailed PDF report as a downloadable file.
+      tags:
+        - Reports
       parameters:
-        - name: sessionId
-          in: query
+        - name: id
+          in: path
           required: true
-          description: Unique identifier for the user's current session
+          description: The unique ID of the quiz session.
           schema:
-            type: string
-            example: "sess_a1b2c3d4e5f6"
-        - name: userId
-          in: query
-          required: true
-          description: Unique identifier for the user
-          schema:
-            type: string
-            example: "user_123456789"
-        - name: responseType
-          in: query
-          required: false
-          description: |
-            How the PDF should be returned to the client.
-            - 'stream' (default): Direct download as binary stream
-            - 'json': JSON response with URL or base64 content
-          schema:
-            type: string
-            enum: [stream, json]
-            default: stream
+            type: integer
+            example: 1
       responses:
         '200':
-          description: PDF successfully generated
+          description: Successful PDF generation. The response body is the PDF file.
           content:
             application/pdf:
               schema:
                 type: string
                 format: binary
-              examples:
-                binaryPdfExample:
-                  summary: Binary PDF file
-                  description: A binary PDF file returned directly to the client for download
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PdfResponse'
-              examples:
-                jsonResponseExample:
-                  summary: JSON response with PDF data
-                  value:
-                    success: true
-                    message: "PDF generated successfully"
-                    data:
-                      documentId: "doc_7890abcdef"
-                      fileName: "user_123456789_report.pdf"
-                      downloadUrl: "https://api.example.com/v1/documents/doc_7890abcdef/download"
-                      expiresAt: "2025-08-09T04:13:57Z"
-                      contentBase64: "JVBERi0xLjYKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp..."
         '400':
-          description: Bad request - missing or invalid parameters
+          description: Bad Request - The provided session ID is not a valid integer.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                message: "Missing or invalid parameters"
-                errors:
-                  - field: "sessionId"
-                    message: "Session ID is required"
-        '401':
-          description: Unauthorized - invalid credentials or expired session
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                message: "Unauthorized access"
-                errors:
-                  - message: "Session expired or invalid"
         '404':
-          description: User not found or template not found
+          description: Not Found - No session exists with the provided ID.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                message: "Resource not found"
-                errors:
-                  - message: "User ID not found in the system"
         '500':
-          description: Internal server error during PDF generation
+          description: Internal Server Error - A problem occurred while fetching data or generating the PDF.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                message: "PDF generation failed"
-                errors:
-                  - message: "Internal server error while generating PDF"
-                  - message: "Please try again later or contact support"
 
+  /sessions/{id}/email-report:
+    post:
+      summary: Send Paginated Email Report
+      description: |
+        Triggers a background process to send a detailed quiz report to the user's email address.
+        The report is split into multiple emails, with each email containing 10 questions.
+        The API immediately responds with a 202 Accepted status to indicate the request has been received.
+      tags:
+        - Reports
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The unique ID of the quiz session for which to send the email report.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '202':
+          description: Accepted - The request has been accepted for processing. The emails will be sent in the background.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Detailed quiz report for session 1 is being sent in parts."
+        '400':
+          description: Bad Request - The provided session ID is not a valid integer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found - No session exists with the provided ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error - A problem occurred while processing the email request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
-    PdfResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          description: Indicates if the operation was successful
-        message:
-          type: string
-          description: Human-readable status message
-        data:
-          type: object
-          properties:
-            documentId:
-              type: string
-              description: Unique identifier for the generated document
-            fileName:
-              type: string
-              description: Suggested filename for the PDF
-            downloadUrl:
-              type: string
-              description: URL to download the generated PDF
-            expiresAt:
-              type: string
-              format: date-time
-              description: When the download URL expires
-            contentBase64:
-              type: string
-              description: Base64 encoded PDF content (only included when explicitly requested)
-          required:
-            - documentId
-            - fileName
-            - downloadUrl
-            - expiresAt
-      required:
-        - success
-        - message
-        - data
-    
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          description: Always false for error responses
+        statusCode:
+          type: integer
+          description: The HTTP status code.
+          example: 404
         message:
           type: string
-          description: Summary of the error
-        errors:
-          type: array
-          description: Detailed error information
-          items:
-            type: object
-            properties:
-              field:
-                type: string
-                description: The specific field that caused the error (if applicable)
-              message:
-                type: string
-                description: Detailed error message
-            required:
-              - message
-      required:
-        - success
-        - message
-        - errors
+          description: A descriptive error message.
+          example: "session with ID 99 not found"
 
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        job_title:
+          type: string
 
-security:
-  - ApiKeyAuth: []
-  - BearerAuth: []
+    Question:
+      type: object
+      properties:
+        id:
+          type: integer
+        question_text:
+          type: string
+        option_a:
+          type: string
+        option_b:
+          type: string
+        option_c:
+          type: string
+        option_d:
+          type: string
+        correct_option:
+          type: string
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        total_marks:
+          type: integer
+        session_date:
+          type: string
+          format: date-time
+
+    QuizAttempt:
+      type: object
+      properties:
+        id:
+          type: integer
+        session_id:
+          type: integer
+        question_id:
+          type: integer
+        chosen_option:
+          type: string
