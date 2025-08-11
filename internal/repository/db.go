@@ -2,240 +2,198 @@ package repository
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-squad-5/pdf-generator/internal/models"
+	"github.com/google/uuid"
 )
 
-func InitDB(filepath string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", filepath)
+func InitDB() (*sql.DB, error) {
+	dsn := "root:root@tcp(127.0.0.1:3333)/quizdb?parseTime=true"
+
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
 	}
-	db.Exec("PRAGMA foreign_keys = ON;")
 
-	createUsersTableSQL := `CREATE TABLE IF NOT EXISTS users ( "id" INTEGER NOT NULL PRIMARY KEY, "first_name" TEXT, "last_name" TEXT, "email" TEXT, "job_title" TEXT );`
-	createQuestionsTableSQL := `CREATE TABLE IF NOT EXISTS questions ( "id" INTEGER NOT NULL PRIMARY KEY, "question_text" TEXT, "option_a" TEXT, "option_b" TEXT, "option_c" TEXT, "option_d" TEXT, "correct_option" TEXT );`
-	createSessionsTableSQL := `CREATE TABLE IF NOT EXISTS sessions ( "id" INTEGER NOT NULL PRIMARY KEY, "user_id" INTEGER, "total_marks" INTEGER, "session_date" DATETIME, FOREIGN KEY(user_id) REFERENCES users(id) );`
-	createAttemptsTableSQL := `CREATE TABLE IF NOT EXISTS quiz_attempts ( "id" INTEGER NOT NULL PRIMARY KEY, "session_id" INTEGER, "question_id" INTEGER, "chosen_option" TEXT, FOREIGN KEY(session_id) REFERENCES sessions(id), FOREIGN KEY(question_id) REFERENCES questions(id) );`
-
-	for _, query := range []string{createUsersTableSQL, createQuestionsTableSQL, createSessionsTableSQL, createAttemptsTableSQL} {
-		if _, err = db.Exec(query); err != nil {
-			return nil, err
-		}
-	}
-
-	var count int
-	row := db.QueryRow("SELECT COUNT(*) FROM users")
-	if err := row.Scan(&count); err != nil {
-		return nil, err
-	}
-	if count == 0 {
-		log.Println("Database is empty. Seeding with multiple users and sessions...")
-		seedData(db)
+	err = db.Ping()
+	if err != nil {
+		return nil, fmt.Errorf("could not connect to MySQL: %w", err)
 	}
 
 	return db, nil
 }
 
-func seedData(db *sql.DB) {
-	rand.Seed(time.Now().UnixNano())
-	log.Println("Seeding 100 questions...")
-	questionIDs := seedQuestions(db)
-
-	log.Println("Seeding 10 users...")
-	userIDs := seedUsers(db)
-
-	log.Println("Seeding multiple quiz sessions for each user...")
-	for _, userID := range userIDs {
-		for i := 0; i < 3; i++ {
-			seedQuizForUser(db, userID, questionIDs)
-		}
+func SeedData(db *sql.DB) error {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM Session").Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		log.Println("Database already contains data. Seeding skipped.")
+		return nil
 	}
 
-	log.Println("Database seeding complete.")
+	rand.Seed(time.Now().UnixNano())
+
+	log.Println("Seeding Questions...")
+	questionIDs := seedQuestions(db)
+
+	log.Println("Seeding Sessions and Quizzes...")
+	seedSessionsAndQuizzes(db, questionIDs)
+
+	return nil
 }
 
-func seedQuestions(db *sql.DB) []int64 {
+func seedQuestions(db *sql.DB) []string {
 	tx, _ := db.Begin()
-	stmt, _ := tx.Prepare(`INSERT INTO questions(question_text, option_a, option_b, option_c, option_d, correct_option) VALUES (?, ?, ?, ?, ?, ?)`)
+	stmt, _ := tx.Prepare(`INSERT INTO Questions(id, question, options, answer, topic) VALUES (?, ?, ?, ?, ?)`)
 	defer stmt.Close()
 
-	var questionIDs []int64
+	var questionIDs []string
 	questions := getFullQuestionList()
+
 	for _, q := range questions {
-		res, _ := stmt.Exec(q.Text, q.A, q.B, q.C, q.D, q.Correct)
-		id, _ := res.LastInsertId()
-		questionIDs = append(questionIDs, id)
+		questionID := uuid.New().String()
+		optionsJSON, _ := json.Marshal(q.Options)
+		_, err := stmt.Exec(questionID, q.Text, optionsJSON, q.Correct, q.Topic)
+		if err != nil {
+			log.Printf("Failed to insert question: %v", err)
+		}
+		questionIDs = append(questionIDs, questionID)
 	}
 	tx.Commit()
 	return questionIDs
 }
 
-func seedUsers(db *sql.DB) []int64 {
-	tx, _ := db.Begin()
-	stmt, _ := tx.Prepare(`INSERT INTO users(first_name, last_name, email, job_title) VALUES (?, ?, ?, ?)`)
-	defer stmt.Close()
-
-	var userIDs []int64
-	users := []struct{ F, L string }{
-		{"Aarav", "Mehta"}, {"Isha", "Patel"}, {"Rohan", "Kumar"}, {"Priya", "Singh"},
-		{"Vikram", "Jain"}, {"Anika", "Sharma"}, {"Arjun", "Verma"}, {"Diya", "Gupta"},
-		{"Kabir", "Das"}, {"Saanvi", "Reddy"},
+func seedSessionsAndQuizzes(db *sql.DB, questionIDs []string) {
+	type questionInfo struct {
+		correctAnswer string
+		optionsJSON   string
 	}
-	for _, u := range users {
-		res, _ := stmt.Exec(u.F, u.L, fmt.Sprintf("%s.%s@example.com", u.F, u.L), "Student")
-		id, _ := res.LastInsertId()
-		userIDs = append(userIDs, id)
+	questionsMap := make(map[string]questionInfo)
+	rows, err := db.Query("SELECT id, answer, options FROM Questions")
+	if err != nil {
+		log.Fatalf("Failed to pre-fetch questions: %v", err)
 	}
-	tx.Commit()
-	return userIDs
-}
+	for rows.Next() {
+		var id string
+		var info questionInfo
+		rows.Scan(&id, &info.correctAnswer, &info.optionsJSON)
+		questionsMap[id] = info
+	}
+	rows.Close()
 
-func seedQuizForUser(db *sql.DB, userID int64, allQuestionIDs []int64) {
 	sessionTx, _ := db.Begin()
-	sessionStmt, _ := sessionTx.Prepare(`INSERT INTO sessions(user_id, total_marks, session_date) VALUES (?, ?, ?)`)
+	sessionStmt, _ := sessionTx.Prepare(`INSERT INTO Session(session_id, email, topic, score) VALUES (?, ?, ?, ?)`)
 	defer sessionStmt.Close()
 
-	rand.Shuffle(len(allQuestionIDs), func(i, j int) {
-		allQuestionIDs[i], allQuestionIDs[j] = allQuestionIDs[j], allQuestionIDs[i]
-	})
-	quizQuestionIDs := allQuestionIDs[:50]
+	quizTx, _ := db.Begin()
+	quizStmt, _ := quizTx.Prepare(`INSERT INTO Quizzes(session_id, question_id, answer, isCorrect) VALUES (?, ?, ?, ?)`)
+	defer quizStmt.Close()
 
-	totalMarks := 0
-	chosenOptions := make(map[int64]string)
+	users := []string{"priya.sharma@example.com", "rohan.verma@example.com", "anjali.singh@example.com"}
 
-	options := []string{"a", "b", "c", "d"}
-	for _, qID := range quizQuestionIDs {
-		var correctOpt string
-		db.QueryRow("SELECT correct_option FROM questions WHERE id = ?", qID).Scan(&correctOpt)
+	for _, email := range users {
+		for i := 0; i < 3; i++ {
+			sessionID := uuid.New().String()
+			topic := "General Knowledge"
+			score := 0
 
-		var chosenOpt string
-		if rand.Intn(10) > 2 {
-			chosenOpt = correctOpt
-			totalMarks++
-		} else {
-			for {
-				chosenOpt = options[rand.Intn(4)]
-				if chosenOpt != correctOpt {
-					break
+			rand.Shuffle(len(questionIDs), func(i, j int) {
+				questionIDs[i], questionIDs[j] = questionIDs[j], questionIDs[i]
+			})
+			quizQuestionIDs := questionIDs[:25]
+
+			for _, qID := range quizQuestionIDs {
+				qInfo := questionsMap[qID]
+
+				var options map[string]string
+				json.Unmarshal([]byte(qInfo.optionsJSON), &options)
+
+				possibleAnswers := make([]string, 0, len(options))
+				for k := range options {
+					possibleAnswers = append(possibleAnswers, k)
 				}
+
+				chosenAnswer := possibleAnswers[rand.Intn(len(possibleAnswers))]
+				isCorrect := chosenAnswer == qInfo.correctAnswer
+
+				if isCorrect {
+					score++
+				}
+				quizStmt.Exec(sessionID, qID, chosenAnswer, isCorrect)
 			}
+			sessionStmt.Exec(sessionID, email, topic, score)
 		}
-		chosenOptions[qID] = chosenOpt
 	}
-
-	res, _ := sessionStmt.Exec(userID, totalMarks, time.Now().Add(-time.Hour*time.Duration(rand.Intn(72))))
-	sessionID, _ := res.LastInsertId()
 	sessionTx.Commit()
-
-	attemptTx, _ := db.Begin()
-	attemptStmt, _ := attemptTx.Prepare(`INSERT INTO quiz_attempts(session_id, question_id, chosen_option) VALUES (?, ?, ?)`)
-	defer attemptStmt.Close()
-	for qID, chosenOpt := range chosenOptions {
-		attemptStmt.Exec(sessionID, qID, chosenOpt)
-	}
-	attemptTx.Commit()
+	quizTx.Commit()
 }
-func getFullQuestionList() []struct{ Text, A, B, C, D, Correct string } {
-	return []struct{ Text, A, B, C, D, Correct string }{
-		{"What is the capital of France?", "Berlin", "Madrid", "Paris", "Rome", "c"},
-		{"Which planet is known as the Red Planet?", "Earth", "Mars", "Jupiter", "Venus", "b"},
-		{"What is the largest ocean on Earth?", "Atlantic", "Indian", "Arctic", "Pacific", "d"},
-		{"Who wrote 'To Kill a Mockingbird'?", "Harper Lee", "Mark Twain", "J.K. Rowling", "F. Scott Fitzgerald", "a"},
-		{"What is the chemical symbol for water?", "O2", "H2O", "CO2", "NaCl", "b"},
-		{"In which year did the Titanic sink?", "1905", "1912", "1918", "1923", "b"},
-		{"What is the currency of Japan?", "Won", "Yuan", "Yen", "Dollar", "c"},
-		{"Who painted the Mona Lisa?", "Vincent van Gogh", "Pablo Picasso", "Leonardo da Vinci", "Claude Monet", "c"},
-		{"What is the hardest natural substance on Earth?", "Gold", "Iron", "Diamond", "Platinum", "c"},
-		{"Which element has the atomic number 1?", "Helium", "Oxygen", "Hydrogen", "Carbon", "c"},
-		{"What is the capital of Australia?", "Sydney", "Melbourne", "Canberra", "Perth", "c"},
-		{"Who discovered penicillin?", "Marie Curie", "Albert Einstein", "Isaac Newton", "Alexander Fleming", "d"},
-		{"What is the tallest mountain in the world?", "K2", "Kangchenjunga", "Mount Everest", "Lhotse", "c"},
-		{"Which country is known as the Land of the Rising Sun?", "China", "South Korea", "Japan", "Thailand", "c"},
-		{"What is the main ingredient in guacamole?", "Tomato", "Avocado", "Onion", "Lime", "b"},
-		{"How many continents are there?", "5", "6", "7", "8", "c"},
-		{"Who was the first person to walk on the moon?", "Buzz Aldrin", "Yuri Gagarin", "Michael Collins", "Neil Armstrong", "d"},
-		{"What is the largest desert in the world?", "Sahara Desert", "Arabian Desert", "Gobi Desert", "Antarctic Polar Desert", "d"},
-		{"Which is the longest river in the world?", "Amazon River", "Nile River", "Yangtze River", "Mississippi River", "b"},
-		{"What does 'CPU' stand for?", "Central Process Unit", "Computer Personal Unit", "Central Processing Unit", "Computer Primary Unit", "c"},
-		{"Who wrote the play 'Romeo and Juliet'?", "Charles Dickens", "William Shakespeare", "George Orwell", "Jane Austen", "b"},
-		{"What is the chemical symbol for gold?", "Ag", "Au", "Pb", "Fe", "b"},
-		{"Which is the smallest planet in our solar system?", "Venus", "Mars", "Mercury", "Uranus", "c"},
-		{"What is the capital of Canada?", "Toronto", "Vancouver", "Montreal", "Ottawa", "d"},
-		{"How many bones are in the adult human body?", "206", "208", "210", "212", "a"},
-		{"Which artist is known for the 'Starry Night' painting?", "Pablo Picasso", "Claude Monet", "Salvador Dalí", "Vincent van Gogh", "d"},
-		{"What is the primary language spoken in Brazil?", "Spanish", "Portuguese", "Brazilian", "English", "b"},
-		{"Who invented the telephone?", "Thomas Edison", "Nikola Tesla", "Alexander Graham Bell", "Guglielmo Marconi", "c"},
-		{"What is the capital of Egypt?", "Alexandria", "Giza", "Cairo", "Luxor", "c"},
-		{"Which gas do plants absorb from the atmosphere?", "Oxygen", "Nitrogen", "Carbon Dioxide", "Hydrogen", "c"},
-		{"What is the main component of the sun?", "Liquid lava", "Rock", "Hydrogen and Helium", "Oxygen", "c"},
-		{"Who was the first female Prime Minister of the United Kingdom?", "Theresa May", "Margaret Thatcher", "Angela Merkel", "Indira Gandhi", "b"},
-		{"What is the largest country by land area?", "Canada", "China", "USA", "Russia", "d"},
-		{"Which of these is a primary color?", "Green", "Orange", "Blue", "Purple", "c"},
-		{"What is the boiling point of water at sea level?", "90°C", "100°C", "110°C", "120°C", "b"},
-		{"Who is the author of the Harry Potter series?", "J.R.R. Tolkien", "George R.R. Martin", "Suzanne Collins", "J.K. Rowling", "d"},
-		{"What is the capital of Italy?", "Milan", "Naples", "Rome", "Venice", "c"},
-		{"Which ocean is the Bermuda Triangle located in?", "Atlantic", "Pacific", "Indian", "Arctic", "a"},
-		{"What is the square root of 64?", "6", "7", "8", "9", "c"},
-		{"What is the national sport of Canada?", "Hockey and Lacrosse", "Baseball", "Basketball", "Soccer", "a"},
-		{"Which composer was deaf for the last part of his life?", "Mozart", "Bach", "Beethoven", "Chopin", "c"},
-		{"What is the capital of Spain?", "Barcelona", "Seville", "Lisbon", "Madrid", "d"},
-		{"What is the largest mammal in the world?", "Elephant", "Blue Whale", "Giraffe", "Great White Shark", "b"},
-		{"Which country gifted the Statue of Liberty to the USA?", "Germany", "United Kingdom", "France", "Italy", "c"},
-		{"What is the chemical formula for table salt?", "H2O", "C6H12O6", "NaCl", "CO2", "c"},
-		{"Who discovered gravity?", "Albert Einstein", "Galileo Galilei", "Isaac Newton", "Nikola Tesla", "c"},
-		{"What is the capital of Russia?", "Saint Petersburg", "Kazan", "Novosibirsk", "Moscow", "d"},
-		{"In what year did World War II end?", "1943", "1944", "1945", "1946", "c"},
-		{"What is the most spoken language in the world?", "English", "Spanish", "Mandarin Chinese", "Hindi", "c"},
-		{"Who is known as the 'Father of Computers'?", "Alan Turing", "Charles Babbage", "Tim Berners-Lee", "Steve Jobs", "b"},
-		{"What is the capital of India?", "Mumbai", "Kolkata", "Chennai", "New Delhi", "d"},
-		{"What is the smallest continent by land area?", "South America", "Europe", "Antarctica", "Australia", "d"},
-		{"Which famous scientist developed the theory of relativity?", "Isaac Newton", "Galileo Galilei", "Albert Einstein", "Stephen Hawking", "c"},
-		{"What is the capital of China?", "Shanghai", "Hong Kong", "Beijing", "Tianjin", "c"},
-		{"How many players are on a standard soccer team on the field?", "9", "10", "11", "12", "c"},
-		{"What is the name of the galaxy we live in?", "Andromeda", "Triangulum", "Whirlpool", "Milky Way", "d"},
-		{"Which is the largest bone in the human body?", "Tibia", "Humerus", "Femur", "Fibula", "c"},
-		{"What is the capital of Germany?", "Munich", "Hamburg", "Frankfurt", "Berlin", "d"},
-		{"Who was the first President of the United States?", "Thomas Jefferson", "Abraham Lincoln", "George Washington", "John Adams", "c"},
-		{"What is the freezing point of water in Celsius?", "-10°C", "0°C", "10°C", "32°C", "b"},
-		{"Which country is home to the kangaroo?", "New Zealand", "South Africa", "Australia", "Indonesia", "c"},
-		{"What is the capital of Brazil?", "Rio de Janeiro", "São Paulo", "Salvador", "Brasília", "d"},
-		{"What is the study of earthquakes called?", "Seismology", "Geology", "Volcanology", "Meteorology", "a"},
-		{"Who painted the ceiling of the Sistine Chapel?", "Raphael", "Donatello", "Leonardo da Vinci", "Michelangelo", "d"},
-		{"What is the main gas found in the air we breathe?", "Oxygen", "Carbon Dioxide", "Nitrogen", "Argon", "c"},
-		{"What is the capital of Argentina?", "Santiago", "Lima", "Bogotá", "Buenos Aires", "d"},
-		{"Which instrument is used to measure atmospheric pressure?", "Thermometer", "Barometer", "Hygrometer", "Anemometer", "b"},
-		{"What is the largest planet in our solar system?", "Saturn", "Jupiter", "Neptune", "Uranus", "b"},
-		{"Who wrote 'Pride and Prejudice'?", "Emily Brontë", "Charlotte Brontë", "Jane Austen", "Mary Shelley", "c"},
-		{"What is the capital of South Korea?", "Busan", "Incheon", "Seoul", "Daegu", "c"},
-		{"What is the process by which plants make their own food called?", "Respiration", "Transpiration", "Photosynthesis", "Germination", "c"},
-		{"What is the world's longest man-made structure?", "The Great Wall of China", "The Hoover Dam", "The Panama Canal", "The Burj Khalifa", "a"},
-		{"What is the capital of Mexico?", "Guadalajara", "Tijuana", "Cancún", "Mexico City", "d"},
-		{"Which is the most populous country in the world?", "India", "United States", "Indonesia", "China", "a"},
-		{"What is the chemical symbol for iron?", "I", "Ir", "Fe", "In", "c"},
-		{"Who invented the light bulb?", "Nikola Tesla", "Benjamin Franklin", "Thomas Edison", "Alexander Graham Bell", "c"},
-		{"What is the capital of South Africa?", "Cape Town", "Johannesburg", "Durban", "Pretoria", "d"},
-		{"What type of animal is a 'canine'?", "Cat", "Dog", "Bird", "Fish", "b"},
-		{"What is the main currency of the United Kingdom?", "Euro", "Dollar", "Pound Sterling", "Franc", "c"},
-		{"Who was the ancient Greek god of the sea?", "Zeus", "Hades", "Poseidon", "Apollo", "c"},
-		{"What is the capital of Thailand?", "Phuket", "Chiang Mai", "Pattaya", "Bangkok", "d"},
-		{"In which country would you find the pyramids of Giza?", "Sudan", "Libya", "Egypt", "Jordan", "c"},
-		{"What is the name of the world's largest rainforest?", "Congo Rainforest", "Daintree Rainforest", "Valdivian Rainforest", "The Amazon", "d"},
-		{"What is the capital of Turkey?", "Istanbul", "Ankara", "Izmir", "Bursa", "b"},
-		{"Which of the following is a reptile?", "Frog", "Snake", "Fish", "Bird", "b"},
-		{"What is the chemical symbol for silver?", "Si", "Sv", "Ag", "Au", "c"},
-		{"Who wrote 'The Great Gatsby'?", "Ernest Hemingway", "William Faulkner", "F. Scott Fitzgerald", "John Steinbeck", "c"},
-		{"What is the capital of Greece?", "Thessaloniki", "Patras", "Heraklion", "Athens", "d"},
-		{"What is the most common blood type in humans?", "A+", "B-", "O+", "AB+", "c"},
-		{"Which country is famous for its tulips and windmills?", "Belgium", "Denmark", "Netherlands", "Switzerland", "c"},
-		{"What is the capital of Sweden?", "Oslo", "Copenhagen", "Helsinki", "Stockholm", "d"},
-		{"What is the largest bird in the world?", "Emu", "Ostrich", "Albatross", "Condor", "b"},
-		{"Who is the main character in the 'Lord of the Rings' trilogy?", "Gandalf", "Aragorn", "Frodo Baggins", "Legolas", "c"},
-		{"What is the capital of Norway?", "Bergen", "Trondheim", "Stavanger", "Oslo", "d"},
-		{"What is the name of the force that opposes motion?", "Gravity", "Inertia", "Friction", "Momentum", "c"},
+
+func getFullQuestionList() []struct {
+	Text, Topic, Correct string
+	Options              models.OptionsMap
+} {
+	return []struct {
+		Text, Topic, Correct string
+		Options              models.OptionsMap
+	}{
+		{"What is the capital of France?", "Geography", "Paris", models.OptionsMap{"Berlin": "Berlin", "Madrid": "Madrid", "Paris": "Paris", "Rome": "Rome"}},
+		{"Which planet is known as the Red Planet?", "Science", "Mars", models.OptionsMap{"Earth": "Earth", "Mars": "Mars", "Jupiter": "Jupiter", "Venus": "Venus"}},
+		{"What is the largest ocean on Earth?", "Geography", "Pacific", models.OptionsMap{"Atlantic": "Atlantic", "Indian": "Indian", "Arctic": "Arctic", "Pacific": "Pacific"}},
+		{"Who wrote 'To Kill a Mockingbird'?", "Literature", "Harper Lee", models.OptionsMap{"Harper Lee": "Harper Lee", "Mark Twain": "Mark Twain", "J.K. Rowling": "J.K. Rowling", "F. Scott Fitzgerald": "F. Scott Fitzgerald"}},
+		{"What is the chemical symbol for water?", "Science", "H2O", models.OptionsMap{"O2": "O2", "H2O": "H2O", "CO2": "CO2", "NaCl": "NaCl"}},
+		{"In which year did the Titanic sink?", "History", "1912", models.OptionsMap{"1905": "1905", "1912": "1912", "1918": "1918", "1923": "1923"}},
+		{"What is the currency of Japan?", "World", "Yen", models.OptionsMap{"Won": "Won", "Yuan": "Yuan", "Yen": "Yen", "Dollar": "Dollar"}},
+		{"Who painted the Mona Lisa?", "Art", "Leonardo da Vinci", models.OptionsMap{"Vincent van Gogh": "Vincent van Gogh", "Pablo Picasso": "Pablo Picasso", "Leonardo da Vinci": "Leonardo da Vinci", "Claude Monet": "Claude Monet"}},
+		{"What is the hardest natural substance on Earth?", "Science", "Diamond", models.OptionsMap{"Gold": "Gold", "Iron": "Iron", "Diamond": "Diamond", "Platinum": "Platinum"}},
+		{"Which element has the atomic number 1?", "Science", "Hydrogen", models.OptionsMap{"Helium": "Helium", "Oxygen": "Oxygen", "Hydrogen": "Hydrogen", "Carbon": "Carbon"}},
+		{"What is the capital of Australia?", "Geography", "Canberra", models.OptionsMap{"Sydney": "Sydney", "Melbourne": "Melbourne", "Canberra": "Canberra", "Perth": "Perth"}},
+		{"Who discovered penicillin?", "History", "Alexander Fleming", models.OptionsMap{"Marie Curie": "Marie Curie", "Albert Einstein": "Albert Einstein", "Isaac Newton": "Isaac Newton", "Alexander Fleming": "Alexander Fleming"}},
+		{"What is the tallest mountain in the world?", "Geography", "Mount Everest", models.OptionsMap{"K2": "K2", "Kangchenjunga": "Kangchenjunga", "Mount Everest": "Mount Everest", "Lhotse": "Lhotse"}},
+		{"Which country is known as the Land of the Rising Sun?", "World", "Japan", models.OptionsMap{"China": "China", "South Korea": "South Korea", "Japan": "Japan", "Thailand": "Thailand"}},
+		{"What is the main ingredient in guacamole?", "Food", "Avocado", models.OptionsMap{"Tomato": "Tomato", "Avocado": "Avocado", "Onion": "Onion", "Lime": "Lime"}},
+		{"How many continents are there?", "Geography", "7", models.OptionsMap{"5": "5", "6": "6", "7": "7", "8": "8"}},
+		{"Who was the first person to walk on the moon?", "History", "Neil Armstrong", models.OptionsMap{"Buzz Aldrin": "Buzz Aldrin", "Yuri Gagarin": "Yuri Gagarin", "Michael Collins": "Michael Collins", "Neil Armstrong": "Neil Armstrong"}},
+		{"What is the largest desert in the world?", "Geography", "Antarctic Polar Desert", models.OptionsMap{"Sahara Desert": "Sahara Desert", "Arabian Desert": "Arabian Desert", "Gobi Desert": "Gobi Desert", "Antarctic Polar Desert": "Antarctic Polar Desert"}},
+		{"Which is the longest river in the world?", "Geography", "Nile River", models.OptionsMap{"Amazon River": "Amazon River", "Nile River": "Nile River", "Yangtze River": "Yangtze River", "Mississippi River": "Mississippi River"}},
+		{"What does 'CPU' stand for?", "Technology", "Central Processing Unit", models.OptionsMap{"Central Process Unit": "Central Process Unit", "Computer Personal Unit": "Computer Personal Unit", "Central Processing Unit": "Central Processing Unit", "Computer Primary Unit": "Computer Primary Unit"}},
+		{"Who wrote the play 'Romeo and Juliet'?", "Literature", "William Shakespeare", models.OptionsMap{"Charles Dickens": "Charles Dickens", "William Shakespeare": "William Shakespeare", "George Orwell": "George Orwell", "Jane Austen": "Jane Austen"}},
+		{"What is the chemical symbol for gold?", "Science", "Au", models.OptionsMap{"Ag": "Ag", "Au": "Au", "Pb": "Pb", "Fe": "Fe"}},
+		{"Which is the smallest planet in our solar system?", "Science", "Mercury", models.OptionsMap{"Venus": "Venus", "Mars": "Mars", "Mercury": "Mercury", "Uranus": "Uranus"}},
+		{"What is the capital of Canada?", "Geography", "Ottawa", models.OptionsMap{"Toronto": "Toronto", "Vancouver": "Vancouver", "Montreal": "Montreal", "Ottawa": "Ottawa"}},
+		{"How many bones are in the adult human body?", "Science", "206", models.OptionsMap{"206": "206", "208": "208", "210": "210", "212": "212"}},
+		{"Which artist is known for the 'Starry Night' painting?", "Art", "Vincent van Gogh", models.OptionsMap{"Pablo Picasso": "Pablo Picasso", "Claude Monet": "Claude Monet", "Salvador Dalí": "Salvador Dalí", "Vincent van Gogh": "Vincent van Gogh"}},
+		{"What is the primary language spoken in Brazil?", "World", "Portuguese", models.OptionsMap{"Spanish": "Spanish", "Portuguese": "Portuguese", "Brazilian": "Brazilian", "English": "English"}},
+		{"Who invented the telephone?", "History", "Alexander Graham Bell", models.OptionsMap{"Thomas Edison": "Thomas Edison", "Nikola Tesla": "Nikola Tesla", "Alexander Graham Bell": "Alexander Graham Bell", "Guglielmo Marconi": "Guglielmo Marconi"}},
+		{"What is the capital of Egypt?", "Geography", "Cairo", models.OptionsMap{"Alexandria": "Alexandria", "Giza": "Giza", "Cairo": "Cairo", "Luxor": "Luxor"}},
+		{"Which gas do plants absorb from the atmosphere?", "Science", "Carbon Dioxide", models.OptionsMap{"Oxygen": "Oxygen", "Nitrogen": "Nitrogen", "Carbon Dioxide": "Carbon Dioxide", "Hydrogen": "Hydrogen"}},
+		{"What is the main component of the sun?", "Science", "Hydrogen and Helium", models.OptionsMap{"Liquid lava": "Liquid lava", "Rock": "Rock", "Hydrogen and Helium": "Hydrogen and Helium", "Oxygen": "Oxygen"}},
+		{"Who was the first female Prime Minister of the United Kingdom?", "History", "Margaret Thatcher", models.OptionsMap{"Theresa May": "Theresa May", "Margaret Thatcher": "Margaret Thatcher", "Angela Merkel": "Angela Merkel", "Indira Gandhi": "Indira Gandhi"}},
+		{"What is the largest country by land area?", "Geography", "Russia", models.OptionsMap{"Canada": "Canada", "China": "China", "USA": "USA", "Russia": "Russia"}},
+		{"Which of these is a primary color?", "Art", "Blue", models.OptionsMap{"Green": "Green", "Orange": "Orange", "Blue": "Blue", "Purple": "Purple"}},
+		{"What is the boiling point of water at sea level?", "Science", "100°C", models.OptionsMap{"90°C": "90°C", "100°C": "100°C", "110°C": "110°C", "120°C": "120°C"}},
+		{"Who is the author of the Harry Potter series?", "Literature", "J.K. Rowling", models.OptionsMap{"J.R.R. Tolkien": "J.R.R. Tolkien", "George R.R. Martin": "George R.R. Martin", "Suzanne Collins": "Suzanne Collins", "J.K. Rowling": "J.K. Rowling"}},
+		{"What is the capital of Italy?", "Geography", "Rome", models.OptionsMap{"Milan": "Milan", "Naples": "Naples", "Rome": "Rome", "Venice": "Venice"}},
+		{"Which ocean is the Bermuda Triangle located in?", "Geography", "Atlantic", models.OptionsMap{"Atlantic": "Atlantic", "Pacific": "Pacific", "Indian": "Indian", "Arctic": "Arctic"}},
+		{"What is the square root of 64?", "Math", "8", models.OptionsMap{"6": "6", "7": "7", "8": "8", "9": "9"}},
+		{"What is the national sport of Canada?", "Sports", "Hockey and Lacrosse", models.OptionsMap{"Hockey and Lacrosse": "Hockey and Lacrosse", "Baseball": "Baseball", "Basketball": "Basketball", "Soccer": "Soccer"}},
+		{"Which composer was deaf for the last part of his life?", "Music", "Beethoven", models.OptionsMap{"Mozart": "Mozart", "Bach": "Bach", "Beethoven": "Beethoven", "Chopin": "Chopin"}},
+		{"What is the capital of Spain?", "Geography", "Madrid", models.OptionsMap{"Barcelona": "Barcelona", "Seville": "Seville", "Lisbon": "Lisbon", "Madrid": "Madrid"}},
+		{"What is the largest mammal in the world?", "Science", "Blue Whale", models.OptionsMap{"Elephant": "Elephant", "Blue Whale": "Blue Whale", "Giraffe": "Giraffe", "Great White Shark": "Great White Shark"}},
+		{"Which country gifted the Statue of Liberty to the USA?", "History", "France", models.OptionsMap{"Germany": "Germany", "United Kingdom": "United Kingdom", "France": "France", "Italy": "Italy"}},
+		{"What is the chemical formula for table salt?", "Science", "NaCl", models.OptionsMap{"H2O": "H2O", "C6H12O6": "C6H12O6", "NaCl": "NaCl", "CO2": "CO2"}},
+		{"Who discovered gravity?", "History", "Isaac Newton", models.OptionsMap{"Albert Einstein": "Albert Einstein", "Galileo Galilei": "Galileo Galilei", "Isaac Newton": "Isaac Newton", "Nikola Tesla": "Nikola Tesla"}},
+		{"What is the capital of Russia?", "Geography", "Moscow", models.OptionsMap{"Saint Petersburg": "Saint Petersburg", "Kazan": "Kazan", "Novosibirsk": "Novosibirsk", "Moscow": "Moscow"}},
+		{"In what year did World War II end?", "History", "1945", models.OptionsMap{"1943": "1943", "1944": "1944", "1945": "1945", "1946": "1946"}},
+		{"What is the most spoken language in the world?", "World", "Mandarin Chinese", models.OptionsMap{"English": "English", "Spanish": "Spanish", "Mandarin Chinese": "Mandarin Chinese", "Hindi": "Hindi"}},
+		{"Who is known as the 'Father of Computers'?", "Technology", "Charles Babbage", models.OptionsMap{"Alan Turing": "Alan Turing", "Charles Babbage": "Charles Babbage", "Tim Berners-Lee": "Tim Berners-Lee", "Steve Jobs": "Steve Jobs"}},
 	}
 }

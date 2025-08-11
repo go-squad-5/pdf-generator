@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
@@ -13,49 +12,41 @@ import (
 
 type PDFService struct {
 	sessionRepo *repository.SessionRepository
-	attemptRepo *repository.QuizAttemptRepository
+	quizzesRepo *repository.QuizzesRepository
 }
 
-func NewPDFService(sessionRepo *repository.SessionRepository, attemptRepo *repository.QuizAttemptRepository) *PDFService {
-	return &PDFService{sessionRepo: sessionRepo, attemptRepo: attemptRepo}
+func NewPDFService(sessionRepo *repository.SessionRepository, quizzesRepo *repository.QuizzesRepository) *PDFService {
+	return &PDFService{sessionRepo: sessionRepo, quizzesRepo: quizzesRepo}
 }
 
-func (s *PDFService) GenerateQuizReport(sessionID int) ([]byte, error) {
+func (s *PDFService) GenerateQuizReport(sessionID string) ([]byte, error) {
 	var wg sync.WaitGroup
 	var session *models.Session
-	var attempts []models.QuizAttempt
-	var sessionErr, attemptsErr error
+	var quizzes []models.Quiz
+	var sessionErr, quizzesErr error
 
 	wg.Add(2)
-
 	go func() {
 		defer wg.Done()
 		session, sessionErr = s.sessionRepo.GetSessionByID(sessionID)
 	}()
-
 	go func() {
 		defer wg.Done()
-		attempts, attemptsErr = s.attemptRepo.GetAttemptsBySessionID(sessionID)
+		quizzes, quizzesErr = s.quizzesRepo.GetQuizzesBySessionID(sessionID)
 	}()
-
-	log.Println("Main thread is waiting for goroutines to finish...")
 	wg.Wait()
-	log.Println("All goroutines finished.")
 
-	if sessionErr != nil {
-		return nil, fmt.Errorf("failed to fetch session data: %w", sessionErr)
-	}
-	if attemptsErr != nil {
-		return nil, fmt.Errorf("failed to fetch attempts data: %w", attemptsErr)
+	if sessionErr != nil || quizzesErr != nil {
+		return nil, fmt.Errorf("failed to fetch data: sessionErr=%v, quizzesErr=%v", sessionErr, quizzesErr)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("session with ID %d not found", sessionID)
+		return nil, fmt.Errorf("session with ID %s not found", sessionID)
 	}
 
-	return s.createPDF(session, attempts)
+	return s.createPDF(session, quizzes)
 }
 
-func (s *PDFService) createPDF(session *models.Session, attempts []models.QuizAttempt) ([]byte, error) {
+func (s *PDFService) createPDF(session *models.Session, quizzes []models.Quiz) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
 
@@ -64,46 +55,39 @@ func (s *PDFService) createPDF(session *models.Session, attempts []models.QuizAt
 	pdf.Ln(12)
 
 	pdf.SetFont("Arial", "B", 12)
-	pdf.Cell(40, 8, "Student Name:")
+	pdf.Cell(40, 8, "User Email:")
 	pdf.SetFont("Arial", "", 12)
-	pdf.Cell(0, 8, fmt.Sprintf("%s %s", session.User.FirstName, session.User.LastName))
-	pdf.Ln(6)
-
-	pdf.SetFont("Arial", "B", 12)
-	pdf.Cell(40, 8, "Session ID:")
-	pdf.SetFont("Arial", "", 12)
-	pdf.Cell(0, 8, fmt.Sprintf("%d", session.ID))
+	pdf.Cell(0, 8, session.Email)
 	pdf.Ln(6)
 
 	pdf.SetFont("Arial", "B", 12)
 	pdf.Cell(40, 8, "Final Score:")
 	pdf.SetFont("Arial", "B", 12)
 	pdf.SetTextColor(0, 100, 0)
-	pdf.Cell(0, 8, fmt.Sprintf("%d / %d", session.TotalMarks, len(attempts)))
+	pdf.Cell(0, 8, fmt.Sprintf("%d / %d", session.Score, len(quizzes)))
 	pdf.SetTextColor(0, 0, 0)
 	pdf.Ln(15)
 
-	for i, attempt := range attempts {
+	for i, quiz := range quizzes {
 		pdf.SetFont("Arial", "B", 10)
-		pdf.MultiCell(0, 5, fmt.Sprintf("%d. %s", i+1, attempt.Question.QuestionText), "", "L", false)
+		pdf.MultiCell(0, 5, fmt.Sprintf("%d. %s", i+1, quiz.QuestionData.Question), "", "L", false)
 		pdf.Ln(2)
 
 		pdf.SetFont("Arial", "", 9)
-		isCorrect := attempt.ChosenOption == attempt.Question.CorrectOption
-		if isCorrect {
+		if quiz.IsCorrect {
 			pdf.SetFillColor(200, 255, 200)
-			pdf.Cell(35, 5, "Your Answer (Correct):")
+			pdf.Cell(40, 5, "Your Answer (Correct):")
 		} else {
 			pdf.SetFillColor(255, 200, 200)
-			pdf.Cell(35, 5, "Your Answer (Incorrect):")
+			pdf.Cell(40, 5, "Your Answer (Incorrect):")
 		}
-		pdf.CellFormat(0, 5, fmt.Sprintf("'%s'", attempt.ChosenOption), "", 0, "L", true, 0, "")
+		pdf.CellFormat(0, 5, quiz.Answer, "", 0, "L", true, 0, "")
 		pdf.Ln(5)
 
-		if !isCorrect {
+		if !quiz.IsCorrect {
 			pdf.SetFillColor(230, 230, 230)
-			pdf.Cell(35, 5, "Correct Answer:")
-			pdf.CellFormat(0, 5, fmt.Sprintf("'%s'", attempt.Question.CorrectOption), "", 0, "L", true, 0, "")
+			pdf.Cell(40, 5, "Correct Answer:")
+			pdf.CellFormat(0, 5, quiz.QuestionData.Answer, "", 0, "L", true, 0, "")
 			pdf.Ln(5)
 		}
 		pdf.Ln(5)

@@ -2,9 +2,7 @@ package handler
 
 import (
 	"fmt"
-	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
 	"github.com/go-squad-5/pdf-generator/internal/service"
@@ -21,33 +19,26 @@ func NewPDFHandler(s *service.PDFService) *PDFHandler {
 
 func (h *PDFHandler) GenerateReportHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	idStr, ok := vars["id"]
+	// The session ID is now a string (UUID), so we don't need to convert it to an integer.
+	id, ok := vars["id"]
 	if !ok {
 		models.RespondWithError(w, http.StatusBadRequest, "Session ID is missing")
 		return
 	}
 
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		models.RespondWithError(w, http.StatusBadRequest, "Invalid Session ID format")
-		return
-	}
-
-	log.Printf("Received request to generate report for session ID: %d", id)
-
 	pdfBytes, err := h.service.GenerateQuizReport(id)
 	if err != nil {
-		if err.Error() == fmt.Sprintf("session with ID %d not found", id) {
+		// Use the string ID in the error message.
+		if err.Error() == fmt.Sprintf("session with ID %s not found", id) {
 			models.RespondWithError(w, http.StatusNotFound, err.Error())
 		} else {
 			models.RespondWithError(w, http.StatusInternalServerError, "Failed to generate PDF report")
 		}
-		log.Printf("Error generating report for session ID %d: %v", id, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", "attachment; filename=quiz_report_session_"+idStr+".pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename=quiz_report_session_"+id+".pdf")
 	w.WriteHeader(http.StatusOK)
 	w.Write(pdfBytes)
 }

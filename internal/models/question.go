@@ -1,11 +1,33 @@
 package models
 
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
+)
+
+// OptionsMap is a custom type to handle the JSON 'options' field.
+type OptionsMap map[string]string
+
+// Value converts the OptionsMap to a JSON string for database storage.
+func (o OptionsMap) Value() (driver.Value, error) {
+	return json.Marshal(o)
+}
+
+// Scan converts the JSON string from the database into an OptionsMap.
+func (o *OptionsMap) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+	return json.Unmarshal(b, &o)
+}
+
+// Question matches your new schema.
 type Question struct {
-	ID            int    `db:"id"`
-	QuestionText  string `db:"question_text"`
-	OptionA       string `db:"option_a"`
-	OptionB       string `db:"option_b"`
-	OptionC       string `db:"option_c"`
-	OptionD       string `db:"option_d"`
-	CorrectOption string `db:"correct_option"`
+	ID       string     `db:"id"`
+	Question string     `db:"question"`
+	Options  OptionsMap `db:"options"` // Using our custom JSON type
+	Answer   string     `db:"answer"`
+	Topic    string     `db:"topic"`
 }

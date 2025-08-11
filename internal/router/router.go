@@ -7,10 +7,7 @@ import (
 
 func NewRouter(pdfHandler *handler.PDFHandler, emailHandler *handler.EmailHandler) *mux.Router {
 	r := mux.NewRouter()
-
 	r.HandleFunc("/sessions/{id}/report", pdfHandler.GenerateReportHandler).Methods("GET")
-
 	r.HandleFunc("/sessions/{id}/email-report", emailHandler.SendReportHandler).Methods("POST")
-
 	return r
 }
