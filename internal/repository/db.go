@@ -14,7 +14,7 @@ import (
 )
 
 func InitDB() (*sql.DB, error) {
-	dsn := "root:root@tcp(127.0.0.1:3333)/quizdb?parseTime=true"
+	dsn := "root:your_secure_password@tcp(127.0.0.1:3306)/quizdb?parseTime=true"
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {

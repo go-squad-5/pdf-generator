@@ -14,7 +14,7 @@ import (
 
 const (
 	smtpHost = "localhost"
-	smtpPort = 1026
+	smtpPort = 1025
 )
 
 type EmailService struct {
