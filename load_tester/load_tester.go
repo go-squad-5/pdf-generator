@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	baseURL     = "http://localhost:8080"
+	baseURL     = "http://localhost:8070"
 	numRequests = 50
 	reportsDir  = "./reports"
 )

@@ -11,7 +11,7 @@ type SessionRepository struct{ DB *sql.DB }
 func NewSessionRepository(db *sql.DB) *SessionRepository { return &SessionRepository{DB: db} }
 
 func (r *SessionRepository) GetSessionByID(sessionID string) (*models.Session, error) {
-	query := "SELECT session_id, email, topic, score FROM Session WHERE session_id = ?"
+	query := "SELECT session_id, email, topic, score FROM SESSION_TABLE WHERE session_id = ?"
 	row := r.DB.QueryRow(query, sessionID)
 
 	var session models.Session

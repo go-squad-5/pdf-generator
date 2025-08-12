@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	baseURL      = "http://localhost:8080"
+	baseURL      = "http://localhost:8070"
 	numRequests  = 50
 	maxSessionID = 30
 )
@@ -67,6 +67,6 @@ func main() {
 	log.Printf("Total time taken: %s", duration)
 	log.Printf("Successful requests: %d", successCount)
 	log.Printf("Failed requests: %d", failureCount)
-	log.Printf("Check your MailHog UI at http://localhost:8026 to see the emails.")
+	log.Printf("Check your MailHog UI at http://localhost:8025 to see the emails.")
 	log.Println("----------------------------------------------")
 }

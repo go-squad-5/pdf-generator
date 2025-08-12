@@ -37,7 +37,7 @@ To run the project, run the following command:
 ```
 
 ## Documentation
-Visit Documentation at [http://localhost:8080/docs](http://localhost:8080/docs)
+Visit Documentation at [http://localhost:8070/docs](http://localhost:8080/docs)
 
 You can edit your OpenAPI documentation in the `docs/openapi.yaml` file.
 

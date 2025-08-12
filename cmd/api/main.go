@@ -35,7 +35,7 @@ func main() {
 	r := router.NewRouter(pdfHandler, emailHandler)
 
 	// Step 6: Start Server
-	port := ":8080"
+	port := ":8070"
 	log.Printf("Server starting on port %s", port)
 	if err := http.ListenAndServe(port, r); err != nil {
 		log.Fatalf("Could not start server: %v", err)
