@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
 	"github.com/go-squad-5/pdf-generator/internal/repository"
@@ -35,6 +36,7 @@ func (s *PDFService) GenerateQuizReport(sessionID string) ([]byte, error) {
 		quizzes, quizzesErr = s.quizzesRepo.GetQuizzesBySessionID(sessionID)
 	}()
 	wg.Wait()
+	time.Sleep(1 * time.Second)
 
 	if sessionErr != nil || quizzesErr != nil {
 		return nil, fmt.Errorf("failed to fetch data: sessionErr=%v, quizzesErr=%v", sessionErr, quizzesErr)
