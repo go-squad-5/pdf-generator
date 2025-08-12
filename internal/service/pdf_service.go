@@ -63,7 +63,7 @@ func (s *PDFService) createPDF(session *models.Session, quizzes []models.Quiz) (
 	pdf.SetFont("Arial", "B", 12)
 	pdf.Cell(40, 8, "Final Score:")
 	pdf.SetFont("Arial", "B", 12)
-	pdf.SetTextColor(0, 100, 0)
+	pdf.SetTextColor(0, 50, 0)
 	pdf.Cell(0, 8, fmt.Sprintf("%d / %d", session.Score, len(quizzes)))
 	pdf.SetTextColor(0, 0, 0)
 	pdf.Ln(15)

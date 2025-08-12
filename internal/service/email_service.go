@@ -29,6 +29,7 @@ func NewEmailService(sessionRepo *repository.SessionRepository, quizzesRepo *rep
 }
 
 func (s *EmailService) SendQuizReportByEmail(sessionID string) error {
+  log.Println("Starting to send quiz report by email for session:", sessionID)
 	var wg sync.WaitGroup
 	var session *models.Session
 	var quizzes []models.Quiz
@@ -72,10 +73,12 @@ func (s *EmailService) SendQuizReportByEmail(sessionID string) error {
 	}
 
 	emailWg.Wait()
+  log.Println("Finished sending quiz report by email for session:", sessionID)
 	return nil
 }
 
 func (s *EmailService) sendSingleEmailPart(session *models.Session, quizzesChunk []models.Quiz, pageNum, totalPages int) {
+  log.Println("Starting thread for Sending email part for session:", session.SessionID, "Page:", pageNum, "of", totalPages)
 	body, err := s.parseEmailTemplate(session, quizzesChunk, pageNum, totalPages)
 	if err != nil {
 		log.Printf("ERROR: Could not parse email template for session %s: %v", session.SessionID, err)
