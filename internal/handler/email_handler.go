@@ -5,15 +5,14 @@ import (
 	"net/http"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
-	"github.com/go-squad-5/pdf-generator/internal/service"
 	"github.com/gorilla/mux"
 )
 
 type EmailHandler struct {
-	service *service.EmailService
+	service EmailService
 }
 
-func NewEmailHandler(s *service.EmailService) *EmailHandler {
+func NewEmailHandler(s EmailService) *EmailHandler {
 	return &EmailHandler{service: s}
 }
 

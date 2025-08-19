@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
-	"github.com/go-squad-5/pdf-generator/internal/repository"
 	"gopkg.in/gomail.v2"
 )
 
@@ -19,12 +18,12 @@ const (
 )
 
 type EmailService struct {
-	sessionRepo *repository.SessionRepository
-	quizzesRepo *repository.QuizzesRepository
-	dialer      *gomail.Dialer
+	sessionRepo SessionRepo
+	quizzesRepo QuizzesRepo
+	dialer      MailDialer
 }
 
-func NewEmailService(sessionRepo *repository.SessionRepository, quizzesRepo *repository.QuizzesRepository) *EmailService {
+func NewEmailService(sessionRepo SessionRepo, quizzesRepo QuizzesRepo) *EmailService {
 	d := gomail.NewDialer(smtpHost, smtpPort, "", "")
 	return &EmailService{sessionRepo: sessionRepo, quizzesRepo: quizzesRepo, dialer: d}
 }

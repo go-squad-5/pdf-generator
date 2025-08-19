@@ -7,16 +7,17 @@ import (
 	"time"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
-	"github.com/go-squad-5/pdf-generator/internal/repository"
 	"github.com/jung-kurt/gofpdf"
 )
 
 type PDFService struct {
-	sessionRepo *repository.SessionRepository
-	quizzesRepo *repository.QuizzesRepository
+	// Depend on the interfaces, not the concrete repository structs.
+	sessionRepo SessionRepo
+	quizzesRepo QuizzesRepo
 }
 
-func NewPDFService(sessionRepo *repository.SessionRepository, quizzesRepo *repository.QuizzesRepository) *PDFService {
+// NewPDFService now accepts the interfaces.
+func NewPDFService(sessionRepo SessionRepo, quizzesRepo QuizzesRepo) *PDFService {
 	return &PDFService{sessionRepo: sessionRepo, quizzesRepo: quizzesRepo}
 }
 
