@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"log"
 
 	"github.com/go-squad-5/pdf-generator/internal/models"
 )
@@ -42,5 +43,6 @@ func (r *QuizzesRepository) GetQuizzesBySessionID(sessionID string) ([]models.Qu
 		quiz.QuestionData = &question
 		quizzes = append(quizzes, quiz)
 	}
+	log.Print(quizzes) //debug
 	return quizzes, nil
 }
