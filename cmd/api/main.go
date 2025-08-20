@@ -15,7 +15,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not initialize and connect to MySQL: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		err = db.Close()
+		if err != nil {
+			log.Fatalf("Could not close MySQL database: %v", err)
+		}
+	}()
 	log.Println("Successfully connected to MySQL database.")
 
 	sessionRepo := repository.NewSessionRepository(db)

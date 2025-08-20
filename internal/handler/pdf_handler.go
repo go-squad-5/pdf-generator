@@ -42,5 +42,5 @@ func (h *PDFHandler) GenerateReportHandler(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "attachment; filename=quiz_report_session_"+id+".pdf")
 	w.WriteHeader(http.StatusOK)
-	w.Write(pdfBytes)
+	_, _ = w.Write(pdfBytes)
 }

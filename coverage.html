@@ -1,0 +1,683 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>api: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/go-squad-5/pdf-generator/cmd/api/main.go (0.0%)</option>
+				
+				<option value="file1">github.com/go-squad-5/pdf-generator/internal/handler/email_handler.go (100.0%)</option>
+				
+				<option value="file2">github.com/go-squad-5/pdf-generator/internal/handler/pdf_handler.go (90.0%)</option>
+				
+				<option value="file3">github.com/go-squad-5/pdf-generator/internal/models/question.go (0.0%)</option>
+				
+				<option value="file4">github.com/go-squad-5/pdf-generator/internal/models/response.go (0.0%)</option>
+				
+				<option value="file5">github.com/go-squad-5/pdf-generator/internal/repository/config.go (0.0%)</option>
+				
+				<option value="file6">github.com/go-squad-5/pdf-generator/internal/repository/quizzes_repository.go (94.7%)</option>
+				
+				<option value="file7">github.com/go-squad-5/pdf-generator/internal/repository/session_repository.go (100.0%)</option>
+				
+				<option value="file8">github.com/go-squad-5/pdf-generator/internal/router/router.go (100.0%)</option>
+				
+				<option value="file9">github.com/go-squad-5/pdf-generator/internal/service/email_service.go (91.2%)</option>
+				
+				<option value="file10">github.com/go-squad-5/pdf-generator/internal/service/pdf_service.go (94.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "log"
+        "net/http"
+
+        "github.com/go-squad-5/pdf-generator/internal/handler"
+        "github.com/go-squad-5/pdf-generator/internal/repository"
+        "github.com/go-squad-5/pdf-generator/internal/router"
+        "github.com/go-squad-5/pdf-generator/internal/service"
+)
+
+func main() <span class="cov0" title="0">{
+        db, err := repository.InitDB()
+        if err != nil </span><span class="cov0" title="0">{
+                log.Fatalf("Could not initialize and connect to MySQL: %v", err)
+        }</span>
+        <span class="cov0" title="0">defer func() </span><span class="cov0" title="0">{
+                err = db.Close()
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Fatalf("Could not close MySQL database: %v", err)
+                }</span>
+        }()
+        <span class="cov0" title="0">log.Println("Successfully connected to MySQL database.")
+
+        sessionRepo := repository.NewSessionRepository(db)
+        quizzesRepo := repository.NewQuizzesRepository(db)
+
+        pdfService := service.NewPDFService(sessionRepo, quizzesRepo)
+        emailService := service.NewEmailService(sessionRepo, quizzesRepo)
+
+        pdfHandler := handler.NewPDFHandler(pdfService)
+        emailHandler := handler.NewEmailHandler(emailService)
+
+        r := router.NewRouter(pdfHandler, emailHandler)
+
+        port := ":8070"
+        log.Printf("Server starting on port %s", port)
+        if err := http.ListenAndServe(port, r); err != nil </span><span class="cov0" title="0">{
+                log.Fatalf("Could not start server: %v", err)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package handler
+
+import (
+        "fmt"
+        "net/http"
+
+        "github.com/go-squad-5/pdf-generator/internal/models"
+        "github.com/gorilla/mux"
+)
+
+type EmailHandler struct {
+        service EmailService
+}
+
+func NewEmailHandler(s EmailService) *EmailHandler <span class="cov8" title="1">{
+        return &amp;EmailHandler{service: s}
+}</span>
+
+func (h *EmailHandler) SendReportHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        id, ok := vars["id"]
+        if !ok </span><span class="cov8" title="1">{
+                models.RespondWithError(w, http.StatusBadRequest, "Session ID is missing")
+                return
+        }</span>
+
+        <span class="cov8" title="1">err := h.service.SendQuizReportByEmail(id)
+        if err != nil </span><span class="cov8" title="1">{
+                if err.Error() == fmt.Sprintf("session with ID %s not found", id) </span><span class="cov8" title="1">{
+                        models.RespondWithError(w, http.StatusNotFound, err.Error())
+                }</span> else<span class="cov8" title="1"> {
+                        models.RespondWithError(w, http.StatusInternalServerError, "Failed to process email request")
+                }</span>
+                <span class="cov8" title="1">return</span>
+        }
+
+        <span class="cov8" title="1">response := map[string]string{"message": fmt.Sprintf("Detailed quiz report for session %s is being sent.", id)}
+        models.RespondWithJSON(w, http.StatusAccepted, response)</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package handler
+
+import (
+        "fmt"
+        "log"
+        "net/http"
+
+        "github.com/go-squad-5/pdf-generator/internal/models"
+        "github.com/gorilla/mux"
+)
+
+type PDFHandler struct {
+        service PDFService
+}
+
+func NewPDFHandler(s PDFService) *PDFHandler <span class="cov8" title="1">{
+        return &amp;PDFHandler{service: s}
+}</span>
+
+func (h *PDFHandler) GenerateReportHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        id, ok := vars["id"]
+        if !ok </span><span class="cov8" title="1">{
+                log.Println("ID is required, bad request.")
+                models.RespondWithError(w, http.StatusBadRequest, "Session ID is missing")
+                return
+        }</span>
+        <span class="cov8" title="1">log.Printf("Generating PDF report for session ID: %s", id)
+
+        pdfBytes, err := h.service.GenerateQuizReport(id)
+        if err != nil </span><span class="cov8" title="1">{
+                if err.Error() == fmt.Sprintf("session with ID %s not found", id) </span><span class="cov8" title="1">{
+                        log.Println("Error while fetching by session id")
+                        models.RespondWithError(w, http.StatusNotFound, err.Error())
+                }</span> else<span class="cov0" title="0"> {
+                        log.Println("Failed to generate PDF Report", err)
+                        models.RespondWithError(w, http.StatusInternalServerError, "Failed to generate PDF report")
+                }</span>
+                <span class="cov8" title="1">return</span>
+        }
+
+        <span class="cov8" title="1">w.Header().Set("Content-Type", "application/pdf")
+        w.Header().Set("Content-Disposition", "attachment; filename=quiz_report_session_"+id+".pdf")
+        w.WriteHeader(http.StatusOK)
+        _, _ = w.Write(pdfBytes)</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package models
+
+import (
+        "database/sql/driver"
+        "encoding/json"
+        "errors"
+)
+
+// OptionsMap is a custom type to handle the JSON 'options' field.
+type OptionsMap []string
+
+// Value converts the OptionsMap to a JSON string for database storage.
+func (o OptionsMap) Value() (driver.Value, error) <span class="cov0" title="0">{
+        return json.Marshal(o)
+}</span>
+
+// Scan converts the JSON string from the database into an OptionsMap.
+func (o *OptionsMap) Scan(value interface{}) error <span class="cov0" title="0">{
+        b, ok := value.([]byte)
+        if !ok </span><span class="cov0" title="0">{
+                return errors.New("type assertion to []byte failed")
+        }</span>
+        <span class="cov0" title="0">return json.Unmarshal(b, &amp;o)</span>
+}
+
+// Question matches your new schema.
+type Question struct {
+        ID       string     `db:"id"`
+        Question string     `db:"question"`
+        Options  OptionsMap `db:"options"` // Using our custom JSON type
+        Answer   string     `db:"answer"`
+        Topic    string     `db:"topic"`
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package models
+
+import (
+        "encoding/json"
+        "net/http"
+)
+
+type ErrorResponse struct {
+        StatusCode int    `json:"statusCode"`
+        Message    string `json:"message"`
+}
+
+func RespondWithError(w http.ResponseWriter, code int, message string) <span class="cov0" title="0">{
+        RespondWithJSON(w, code, ErrorResponse{StatusCode: code, Message: message})
+}</span>
+
+func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) <span class="cov0" title="0">{
+        response, _ := json.Marshal(payload)
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(code)
+        w.Write(response)
+}</span>
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package repository
+
+import (
+        "database/sql"
+        "fmt"
+
+        _ "github.com/go-sql-driver/mysql"
+)
+
+func InitDB() (*sql.DB, error) <span class="cov0" title="0">{
+        dsn := "root:my-secret-pw@tcp(127.0.0.1:3306)/quizdb?parseTime=true"
+
+        db, err := sql.Open("mysql", dsn)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">err = db.Ping()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("could not connect to MySQL: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return db, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package repository
+
+import (
+        "database/sql"
+        "log"
+
+        "github.com/go-squad-5/pdf-generator/internal/models"
+)
+
+type QuizzesRepository struct{ DB *sql.DB }
+
+func NewQuizzesRepository(db *sql.DB) *QuizzesRepository <span class="cov8" title="1">{ return &amp;QuizzesRepository{DB: db} }</span>
+
+func (r *QuizzesRepository) GetQuizzesBySessionID(sessionID string) ([]models.Quiz, error) <span class="cov8" title="1">{
+        query := `
+                SELECT
+                        q.id, q.session_id, q.question_id, q.answer, q.is_correct,
+                        qs.question, qs.options, qs.answer as correctAnswer, qs.topic
+                FROM quizzes q
+                JOIN questions qs ON q.question_id = qs.id
+                WHERE q.session_id = ?
+                ORDER BY qs.id`
+        rows, err := r.DB.Query(query, sessionID)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">defer rows.Close()
+
+        var quizzes []models.Quiz
+        for rows.Next() </span><span class="cov8" title="1">{
+                var quiz models.Quiz
+                var question models.Question
+                var correctAnswer string
+
+                err := rows.Scan(
+                        &amp;quiz.ID, &amp;quiz.SessionID, &amp;quiz.QuestionID, &amp;quiz.Answer, &amp;quiz.IsCorrect,
+                        &amp;question.Question, &amp;question.Options, &amp;correctAnswer, &amp;question.Topic,
+                )
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">question.Answer = correctAnswer
+                quiz.QuestionData = &amp;question
+                quizzes = append(quizzes, quiz)</span>
+        }
+        <span class="cov8" title="1">log.Print(quizzes) //debug
+        return quizzes, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package repository
+
+import (
+        "database/sql"
+
+        "github.com/go-squad-5/pdf-generator/internal/models"
+)
+
+type SessionRepository struct{ DB *sql.DB }
+
+func NewSessionRepository(db *sql.DB) *SessionRepository <span class="cov8" title="1">{ return &amp;SessionRepository{DB: db} }</span>
+
+func (r *SessionRepository) GetSessionByID(sessionID string) (*models.Session, error) <span class="cov8" title="1">{
+        query := "SELECT session_id, email, topic, score FROM SESSION_TABLE WHERE session_id = ?"
+        row := r.DB.QueryRow(query, sessionID)
+
+        var session models.Session
+        err := row.Scan(&amp;session.SessionID, &amp;session.Email, &amp;session.Topic, &amp;session.Score)
+        if err != nil </span><span class="cov8" title="1">{
+                if err == sql.ErrNoRows </span><span class="cov8" title="1">{
+                        return nil, nil
+                }</span>
+                <span class="cov8" title="1">return nil, err</span>
+        }
+        <span class="cov8" title="1">return &amp;session, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package router
+
+import (
+        "github.com/go-squad-5/pdf-generator/internal/handler"
+        "github.com/gorilla/mux"
+)
+
+func NewRouter(pdfHandler *handler.PDFHandler, emailHandler *handler.EmailHandler) *mux.Router <span class="cov8" title="1">{
+        r := mux.NewRouter()
+        r.HandleFunc("/sessions/{id}/report", pdfHandler.GenerateReportHandler).Methods("GET")
+        r.HandleFunc("/sessions/{id}/email-report", emailHandler.SendReportHandler).Methods("POST")
+        return r
+}</span>
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package service
+
+import (
+        "bytes"
+        "fmt"
+        "html/template"
+        "log"
+        "sync"
+        "time"
+
+        "github.com/go-squad-5/pdf-generator/internal/models"
+        "gopkg.in/gomail.v2"
+)
+
+const (
+        smtpHost = "localhost"
+        smtpPort = 1025
+)
+
+type EmailService struct {
+        sessionRepo SessionRepo
+        quizzesRepo QuizzesRepo
+        dialer      MailDialer
+}
+
+func NewEmailService(sessionRepo SessionRepo, quizzesRepo QuizzesRepo) *EmailService <span class="cov8" title="1">{
+        d := gomail.NewDialer(smtpHost, smtpPort, "", "")
+        return &amp;EmailService{sessionRepo: sessionRepo, quizzesRepo: quizzesRepo, dialer: d}
+}</span>
+
+func (s *EmailService) SendQuizReportByEmail(sessionID string) error <span class="cov8" title="1">{
+        log.Println("Starting to send quiz report by email for session:", sessionID)
+        var wg sync.WaitGroup
+        var session *models.Session
+        var quizzes []models.Quiz
+        var sessionErr, quizzesErr error
+
+        wg.Add(2)
+        go func() </span><span class="cov8" title="1">{
+                defer wg.Done()
+                session, sessionErr = s.sessionRepo.GetSessionByID(sessionID)
+        }</span>()
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                defer wg.Done()
+                quizzes, quizzesErr = s.quizzesRepo.GetQuizzesBySessionID(sessionID)
+        }</span>()
+        <span class="cov8" title="1">wg.Wait()
+
+        if sessionErr != nil || quizzesErr != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("failed to fetch data: sessionErr=%v, quizzesErr=%v", sessionErr, quizzesErr)
+        }</span>
+        <span class="cov8" title="1">if session == nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("session with ID %s not found", sessionID)
+        }</span>
+
+        <span class="cov8" title="1">const questionsPerEmail = 10
+        var emailWg sync.WaitGroup
+
+        for i := 0; i &lt; len(quizzes); i += questionsPerEmail </span><span class="cov8" title="1">{
+                end := i + questionsPerEmail
+                if end &gt; len(quizzes) </span><span class="cov8" title="1">{
+                        end = len(quizzes)
+                }</span>
+                <span class="cov8" title="1">paginatedQuizzes := quizzes[i:end]
+                pageNumber := (i / questionsPerEmail) + 1
+                totalPages := (len(quizzes) + questionsPerEmail - 1) / questionsPerEmail
+
+                emailWg.Add(1)
+                go func(pQuizzes []models.Quiz, pNum, tPages int) </span><span class="cov8" title="1">{
+                        defer emailWg.Done()
+                        s.sendSingleEmailPart(session, pQuizzes, pNum, tPages)
+                }</span>(paginatedQuizzes, pageNumber, totalPages)
+        }
+
+        <span class="cov8" title="1">emailWg.Wait()
+        log.Println("Finished sending quiz report by email for session:", sessionID)
+        return nil</span>
+}
+
+func (s *EmailService) sendSingleEmailPart(session *models.Session, quizzesChunk []models.Quiz, pageNum, totalPages int) <span class="cov8" title="1">{
+        log.Println("Starting thread for Sending email part for session:", session.SessionID, "Page:", pageNum, "of", totalPages)
+        time.Sleep(1 * time.Second)
+        body, err := s.parseEmailTemplate(session, quizzesChunk, pageNum, totalPages)
+        if err != nil </span><span class="cov0" title="0">{
+                log.Printf("ERROR: Could not parse email template for session %s: %v", session.SessionID, err)
+                return
+        }</span>
+
+        <span class="cov8" title="1">m := gomail.NewMessage()
+        m.SetHeader("From", "quiz-system@university.com")
+        m.SetHeader("To", session.Email)
+        m.SetHeader("Subject", fmt.Sprintf("Detailed Quiz Report for Session #%s (Part %d/%d)", session.SessionID, pageNum, totalPages))
+        m.SetBody("text/html", body)
+
+        if err := s.dialer.DialAndSend(m); err != nil </span><span class="cov0" title="0">{
+                log.Printf("ERROR: Failed to send email for session %s part %d: %v", session.SessionID, pageNum, err)
+        }</span>
+}
+
+func (s *EmailService) parseEmailTemplate(session *models.Session, quizzes []models.Quiz, pageNum, totalPages int) (string, error) <span class="cov8" title="1">{
+        const templateStr = `
+    &lt;!DOCTYPE html&gt;
+    &lt;html&gt;
+    &lt;body&gt;
+        &lt;h1&gt;Detailed Quiz Report&lt;/h1&gt;
+        &lt;h2&gt;Session #{{.Session.SessionID}} - Part {{.PageNum}} of {{.TotalPages}}&lt;/h2&gt;
+        &lt;p&gt;Dear user, here are the details for this part of your quiz:&lt;/p&gt;
+        {{range .Quizzes}}
+        &lt;div&gt;
+            &lt;p&gt;&lt;b&gt;Question:&lt;/b&gt; {{.QuestionData.Question}}&lt;/p&gt;
+            &lt;p&gt;Your Answer: &lt;b&gt;{{.Answer}}&lt;/b&gt;&lt;/p&gt;
+            {{if not .IsCorrect}}
+            &lt;p&gt;Correct Answer: &lt;b&gt;{{.QuestionData.Answer}}&lt;/b&gt;&lt;/p&gt;
+            {{end}}
+        &lt;/div&gt;
+        &lt;hr&gt;
+        {{end}}
+    &lt;/body&gt;
+    &lt;/html&gt;`
+
+        t, err := template.New("email").Parse(templateStr)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", err
+        }</span>
+
+        <span class="cov8" title="1">data := struct {
+                Session    *models.Session
+                Quizzes    []models.Quiz
+                PageNum    int
+                TotalPages int
+        }{
+                Session:    session,
+                Quizzes:    quizzes,
+                PageNum:    pageNum,
+                TotalPages: totalPages,
+        }
+
+        var tpl bytes.Buffer
+        if err := t.Execute(&amp;tpl, data); err != nil </span><span class="cov0" title="0">{
+                return "", err
+        }</span>
+        <span class="cov8" title="1">return tpl.String(), nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package service
+
+import (
+        "bytes"
+        "fmt"
+        "sync"
+        "time"
+
+        "github.com/go-squad-5/pdf-generator/internal/models"
+        "github.com/jung-kurt/gofpdf"
+)
+
+type PDFService struct {
+        // Depend on the interfaces, not the concrete repository structs.
+        sessionRepo SessionRepo
+        quizzesRepo QuizzesRepo
+}
+
+// NewPDFService now accepts the interfaces.
+func NewPDFService(sessionRepo SessionRepo, quizzesRepo QuizzesRepo) *PDFService <span class="cov8" title="1">{
+        return &amp;PDFService{sessionRepo: sessionRepo, quizzesRepo: quizzesRepo}
+}</span>
+
+func (s *PDFService) GenerateQuizReport(sessionID string) ([]byte, error) <span class="cov8" title="1">{
+        var wg sync.WaitGroup
+        var session *models.Session
+        var quizzes []models.Quiz
+        var sessionErr, quizzesErr error
+
+        wg.Add(2)
+        go func() </span><span class="cov8" title="1">{
+                defer wg.Done()
+                session, sessionErr = s.sessionRepo.GetSessionByID(sessionID)
+        }</span>()
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                defer wg.Done()
+                quizzes, quizzesErr = s.quizzesRepo.GetQuizzesBySessionID(sessionID)
+        }</span>()
+        <span class="cov8" title="1">wg.Wait()
+        time.Sleep(1 * time.Second)
+
+        if sessionErr != nil || quizzesErr != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to fetch data: sessionErr=%v, quizzesErr=%v", sessionErr, quizzesErr)
+        }</span>
+        <span class="cov8" title="1">if session == nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("session with ID %s not found", sessionID)
+        }</span>
+
+        <span class="cov8" title="1">return s.createPDF(session, quizzes)</span>
+}
+
+func (s *PDFService) createPDF(session *models.Session, quizzes []models.Quiz) ([]byte, error) <span class="cov8" title="1">{
+        pdf := gofpdf.New("P", "mm", "A4", "")
+        pdf.AddPage()
+
+        pdf.SetFont("Arial", "B", 20)
+        pdf.Cell(0, 10, "Quiz Performance Report")
+        pdf.Ln(12)
+
+        pdf.SetFont("Arial", "B", 12)
+        pdf.Cell(40, 8, "User Email:")
+        pdf.SetFont("Arial", "", 12)
+        pdf.Cell(0, 8, session.Email)
+        pdf.Ln(6)
+
+        pdf.SetFont("Arial", "B", 12)
+        pdf.Cell(40, 8, "Final Score:")
+        pdf.SetFont("Arial", "B", 12)
+        pdf.SetTextColor(0, 50, 0)
+        pdf.Cell(0, 8, fmt.Sprintf("%d / %d", session.Score, len(quizzes)))
+        pdf.SetTextColor(0, 0, 0)
+        pdf.Ln(15)
+
+        for i, quiz := range quizzes </span><span class="cov8" title="1">{
+                pdf.SetFont("Arial", "B", 10)
+                pdf.MultiCell(0, 5, fmt.Sprintf("%d. %s", i+1, quiz.QuestionData.Question), "", "L", false)
+                pdf.Ln(2)
+
+                pdf.SetFont("Arial", "", 9)
+                if quiz.IsCorrect.Valid &amp;&amp; quiz.IsCorrect.Bool </span><span class="cov0" title="0">{
+                        pdf.SetFillColor(200, 255, 200)
+                        pdf.Cell(40, 5, "Your Answer (Correct):")
+                }</span> else<span class="cov8" title="1"> {
+                        pdf.SetFillColor(255, 200, 200)
+                        pdf.Cell(40, 5, "Your Answer (Incorrect):")
+                }</span>
+                <span class="cov8" title="1">pdf.CellFormat(0, 5, quiz.Answer.String, "", 0, "L", true, 0, "")
+                pdf.Ln(5)
+
+                if !quiz.IsCorrect.Valid || !quiz.IsCorrect.Bool </span><span class="cov8" title="1">{
+                        pdf.SetFillColor(230, 230, 230)
+                        pdf.Cell(40, 5, "Correct Answer:")
+                        pdf.CellFormat(0, 5, quiz.QuestionData.Answer, "", 0, "L", true, 0, "")
+                        pdf.Ln(5)
+                }</span>
+                <span class="cov8" title="1">pdf.Ln(5)</span>
+        }
+
+        <span class="cov8" title="1">var buf bytes.Buffer
+        if err := pdf.Output(&amp;buf); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return buf.Bytes(), nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
