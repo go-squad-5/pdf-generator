@@ -198,18 +198,6 @@ func TestPDFHandler_GenerateReportHandler_Success(t *testing.T) {
 
 ---
 
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-## Contributing
-
-Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
-
----
-
 ## Contact
 
 For questions or support, please open an issue on this repository.
